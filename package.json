@@ -1,0 +1,44 @@
+{
+  "name": "shop-management-system",
+  "productName": "Shop Management",
+  "version": "1.0.0",
+  "description": "Offline shop management desktop app (Electron + FastAPI + SQLite)",
+  "main": "electron/main.js",
+  "author": "Shop Management",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix frontend install && npm install",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 --reload",
+    "start": "electron .",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "node scripts/build-backend.js",
+    "build:all": "npm run build:frontend && npm run build:backend",
+    "dist:win": "npm run build:all && electron-builder --win nsis --x64",
+    "dist:mac": "npm run build:all && electron-builder --mac dmg",
+    "dist:dir": "npm run build:all && electron-builder --dir",
+    "test:backend": "cd backend && python -m pytest -q"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.shopmanagement.desktop",
+    "productName": "Shop Management",
+    "directories": { "output": "release" },
+    "files": ["electron/**/*", "package.json"],
+    "extraResources": [
+      { "from": "backend/dist/shop-server", "to": "backend", "filter": ["**/*"] }
+    ],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": { "category": "public.app-category.business", "target": ["dmg"] },
+    "dmg": { "title": "Shop Management" }
+  }
+}

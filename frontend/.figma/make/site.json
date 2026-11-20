@@ -1,0 +1,10 @@
+{
+  "description": "Simple shop management app for small grocery stores. Track daily sales, cash flow, stock levels, customer debts and supplier payments with an intuitive interface for owners and workers.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

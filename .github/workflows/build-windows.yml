@@ -1,0 +1,30 @@
+name: Build Windows Installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/Scripts/pip install -r backend/requirements.txt pyinstaller
+      - name: Install Node dependencies & Build Windows EXE
+        run: |
+          npm run setup
+          npm run dist:win
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shop-Management-Windows-Installer
+          path: release/*.exe

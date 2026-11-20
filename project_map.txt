@@ -1,0 +1,337 @@
+
+=== FILE: ./frontend/dist/assets/index-Cl1BJrHy.js ===
+
+=== FILE: ./frontend/vite.config.ts ===
+export default defineConfig(({ mode }) => {
+type FigmaSiteConfiguration = {
+function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {
+function figmaErrorOverlayReplay(): Plugin {
+function figmaReactRefreshBoundaryFallback(): Plugin {
+function figmaMakeKitPlugin(options: { storiesGlob: string | string[] }): Plugin {
+function figmaLinkedPackageSourcemaps(): Plugin {
+
+=== FILE: ./frontend/src/App.tsx ===
+type Lang = "fr" | "ar";
+type Role = "owner" | "worker" | "admin";
+type Screen = "welcome" | "login" | "signup" | "recovery" | "app" | "adminLogin";
+type Page =
+type WorkerAccount = {
+const copy = {
+const products = [
+function App() {
+function Brand({ light = false }: { light?: boolean }) {
+function LanguageButton({
+function Welcome({ t, lang, setLang, setScreen }: any) {
+function AuthLayout({ children, t, lang, setLang, setScreen, title, subtitle }: any) {
+
+=== FILE: ./frontend/src/main.tsx ===
+
+=== FILE: ./frontend/src/ctx.ts ===
+export type ShopInfo = { name: string; phone: string; city: string };
+export type AppCtxValue = {
+export const AppCtx = createContext<AppCtxValue>({
+export const useApp = () => useContext(AppCtx);
+export function useFetch<T = any>(path: string | null) {
+export const receiptStore: { invoice: any } = { invoice: null };
+export const modalStore: { data: any } = { data: null };
+
+=== FILE: ./frontend/src/api.ts ===
+const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+export const API_BASE: string =
+const TOKEN_KEY = "shop.token";
+export const getToken = () => sessionStorage.getItem(TOKEN_KEY);
+export const setToken = (t: string | null) =>
+export class ApiError extends Error {
+export const api = {
+export const num = (v: unknown): number => (v === null || v === undefined || v === "" ? 0 : Number(v));
+export async function waitForServer(tries = 40): Promise<boolean> {
+export type SessionUser = {
+export const errMsg = (e: unknown, fallback = "Erreur") =>
+
+=== FILE: ./frontend/src/vite-env.d.ts ===
+
+=== FILE: ./backend/app/routers/catalog.py ===
+class UnitIn(BaseModel):
+class ProductIn(BaseModel):
+class ProductPatch(BaseModel):
+def product_out(p: Product, *, show_cost: bool) -> dict:
+def unit_presets(user: User = Depends(staff)):
+def list_products(q: str | None = None, active_only: bool = True, db: Session = Depends(get_db),
+def create_product(body: ProductIn, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def update_product(pid: int, body: ProductPatch, db: Session = Depends(get_db),
+def delete_product(pid: int, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+class PartyIn(BaseModel):
+def list_customers(q: str | None = None, db: Session = Depends(get_db), user: User = Depends(staff)):
+def create_customer(body: PartyIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+
+=== FILE: ./backend/app/routers/auth.py ===
+def user_out(u: User) -> dict:
+def gen_code(prefix: str, a: int = 4, b: int = 2) -> str:
+def gen_password() -> str:
+def next_username(db: Session, prefix: str) -> str:
+class SetupIn(BaseModel):
+def setup_status(db: Session = Depends(get_db)):
+def setup(body: SetupIn, db: Session = Depends(get_db)):
+class LoginIn(BaseModel):
+def login(body: LoginIn, db: Session = Depends(get_db)):
+class PinIn(BaseModel):
+def switch_list(db: Session = Depends(get_db)):
+def pin_login(body: PinIn, db: Session = Depends(get_db)):
+
+=== FILE: ./backend/app/routers/backup.py ===
+def _stamp() -> str:
+def make_backup_file(dest: Path) -> Path:
+class ExportIn(BaseModel):
+def export_backup(body: ExportIn, db: Session = Depends(get_db), user: User = Depends(owner_or_admin)):
+def download_backup(db: Session = Depends(get_db), user: User = Depends(owner_or_admin)):
+def list_backups(user: User = Depends(owner_or_admin)):
+def validate_backup(path: Path) -> None:
+def restore_from(path: Path) -> None:
+class RestorePath(BaseModel):
+def restore_backup_path(body: RestorePath, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+
+=== FILE: ./backend/app/routers/finance.py ===
+def get_balances(db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def ledger(date_from: date | None = None, date_to: date | None = None, limit: int = Query(200, le=1000),
+class OpeningIn(BaseModel):
+def opening_balance(body: OpeningIn, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+class ExpenseIn(BaseModel):
+def add_expense(body: ExpenseIn, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def list_expenses(date_from: date | None = None, date_to: date | None = None, db: Session = Depends(get_db),
+def _debt_out(db: Session, d: Debt) -> dict:
+def list_debts(direction: str | None = None, include_closed: bool = False, db: Session = Depends(get_db),
+class DebtIn(BaseModel):
+def add_debt(body: DebtIn, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+class RepayIn(BaseModel):
+
+=== FILE: ./backend/app/routers/users.py ===
+class WorkerIn(BaseModel):
+class WorkerPatch(BaseModel):
+def list_workers(db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def create_worker(body: WorkerIn, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def patch_worker(wid: int, body: WorkerPatch, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+def reset_worker_password(wid: int, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+class AdminPwChange(BaseModel):
+def change_admin_password(body: AdminPwChange, db: Session = Depends(get_db), user: User = Depends(owner_only)):
+class AdminPwCheck(BaseModel):
+def verify_admin(body: AdminPwCheck, db: Session = Depends(get_db), user: User = Depends(security.current_user)):
+
+=== FILE: ./backend/app/routers/sales.py ===
+class LineIn(BaseModel):
+class InvoiceIn(BaseModel):
+def create_invoice(
+def list_invoices(
+def _get_visible(db: Session, user: User, iid: int) -> Invoice:
+def get_invoice(iid: int, db: Session = Depends(get_db), user: User = Depends(staff)):
+class VoidIn(BaseModel):
+def void_invoice(
+def forbid_invoice_mutation(iid: int, user: User = Depends(security.current_user)):
+def receipt_html(
+class ReceiveIn(BaseModel):
+def stock_receive(
+
+=== FILE: ./backend/app/routers/__init__.py ===
+
+=== FILE: ./backend/app/routers/admin.py ===
+def overview(db: Session = Depends(get_db), user: User = Depends(dds_only)):
+def users(db: Session = Depends(get_db), user: User = Depends(dds_only)):
+def reset_pw(uid: int, db: Session = Depends(get_db), user: User = Depends(dds_only)):
+def audit_log(limit: int = Query(200, le=1000), action: str | None = None, db: Session = Depends(get_db),
+
+=== FILE: ./backend/app/routers/reports.py ===
+def _period(db: Session, d_from: date | None, d_to: date | None) -> dict:
+def summary(date_from: date | None = None, date_to: date | None = None, db: Session = Depends(get_db),
+def dashboard(date_from: date | None = None, date_to: date | None = None, db: Session = Depends(get_db),
+def _num(s: str):
+def _received(db: Session, a, b):
+
+=== FILE: ./backend/app/db.py ===
+def _make_engine(path: str) -> Engine:
+def get_engine() -> Engine:
+def reset_engine() -> None:
+def get_db() -> Iterator[Session]:
+def session_factory() -> Session:
+
+=== FILE: ./backend/app/config.py ===
+def data_dir() -> Path:
+def db_path() -> Path:
+def backups_dir() -> Path:
+def resource_dir() -> Path:
+
+=== FILE: ./backend/app/models.py ===
+def utcnow() -> datetime:
+class DecText(TypeDecorator):
+class UTCDateTime(TypeDecorator):
+class Base(DeclarativeBase):
+class User(Base):
+class AuthSession(Base):
+class LockoutCounter(Base):
+class Setting(Base):
+class Counter(Base):
+class Product(Base):
+class ProductUnit(Base):
+class StockMovement(Base):
+
+=== FILE: ./backend/app/security.py ===
+def hash_secret(value: str) -> str:
+def verify_secret(hashed: str | None, value: str) -> bool:
+def _tok_hash(token: str) -> str:
+def create_session(db: Session, user: User) -> str:
+def destroy_session(db: Session, token: str) -> None:
+def _bearer(authorization: str | None, access_token: str | None) -> str | None:
+def current_user(
+def current_user_or_query(
+def require_roles(*roles: str):
+def _lock_check(db: Session, key: str) -> LockoutCounter:
+def register_failure(db: Session, key: str, actor: User | None, what: str) -> None:
+def _lock_check_no_raise(db: Session, key: str) -> LockoutCounter:
+
+=== FILE: ./backend/app/__init__.py ===
+
+=== FILE: ./backend/app/errors.py ===
+class ApiError(Exception):
+def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
+
+=== FILE: ./backend/app/main.py ===
+def ensure_dds_admin() -> None:
+def create_app() -> FastAPI:
+
+=== FILE: ./backend/app/migrate.py ===
+def alembic_config() -> Config:
+def upgrade() -> None:
+
+=== FILE: ./backend/app/services/finance.py ===
+def account_of(method: str) -> str:
+def add_ledger(
+def balances(db: Session, until: datetime | None = None) -> dict[str, Decimal]:
+def local_tz():
+def day_bounds(d: date) -> tuple[datetime, datetime]:
+def range_bounds(d_from: date | None, d_to: date | None) -> tuple[datetime, datetime]:
+def local_year() -> int:
+
+=== FILE: ./backend/app/services/units.py ===
+def D(value, field: str = "valeur") -> Decimal:
+def q2(d: Decimal) -> Decimal:
+def q3(d: Decimal) -> Decimal:
+def _norm(name: str) -> str:
+def validate_unit_defs(base_unit: str, units: list[dict]) -> list[dict]:
+def find_unit(product: Product, unit_name: str | None) -> tuple[str, Decimal, Decimal | None]:
+def to_base(product: Product, unit_name: str | None, qty) -> tuple[Decimal, Decimal, str, Decimal]:
+def catalog_unit_price(product: Product, unit_name: str | None) -> Decimal:
+
+=== FILE: ./backend/app/services/audit.py ===
+def _canon(ts: datetime, actor_id, action, entity, entity_id, reason, details, prev) -> str:
+def log(
+def verify_chain(db: Session) -> dict:
+def get_setting(db: Session, key: str, default: str = "") -> str:
+def set_setting(db: Session, key: str, value: str) -> None:
+def next_counter(db: Session, name: str) -> int:
+
+=== FILE: ./backend/app/services/__init__.py ===
+
+=== FILE: ./backend/app/services/stock.py ===
+def receive_stock(
+def adjust_stock(db: Session, user: User, product: Product, new_qty_base, reason: str) -> StockMovement:
+
+=== FILE: ./backend/app/services/invoices.py ===
+def _receipt_no(db: Session) -> tuple[str, int, int]:
+def create_invoice(db: Session, user: User, payload: dict) -> Invoice:
+def void_invoice(db: Session, user: User, inv: Invoice, reason: str, admin_password: str | None) -> Invoice:
+def serialize(db: Session, inv: Invoice) -> dict:
+
+=== FILE: ./backend/tests/test_finance.py ===
+def sale(shop, total="1000", method="cash", token=None, **extra):
+def test_cash_and_mobile_money_tracked_separately(shop):
+def test_credit_sale_and_repayment_are_not_double_counted_as_revenue(shop):
+def test_credit_sale_requires_customer(shop):
+def test_voiding_credit_sale_cancels_debt_and_refunds_repayments(shop):
+def test_manual_debt_and_supplier_payable(shop):
+def test_weighted_average_cost_and_profit(shop):
+def test_daily_register_open_close_reconciliation(shop):
+def test_backup_export_and_restore_roundtrip(shop, tmp_path):
+def test_restore_rejects_non_backup_file(shop, tmp_path):
+def test_backup_download_and_worker_blocked(shop):
+
+=== FILE: ./backend/tests/test_security.py ===
+def make_invoice(shop, token=None, pid=None, qty="2", price=None):
+def test_worker_cannot_modify_product_price_or_cost(shop):
+def test_worker_cannot_create_or_delete_products(shop):
+def test_owner_price_change_needs_admin_password(shop):
+def test_worker_cannot_set_cost_through_stock_receive(shop):
+def test_worker_cannot_delete_or_edit_invoices(shop):
+def test_even_owner_cannot_delete_invoice(shop):
+def test_database_triggers_block_direct_tampering(shop):
+def test_void_flow_requires_admin_password_reason_and_reverses_everything(shop):
+def test_price_override_needs_admin_password_and_is_audited(shop):
+def test_admin_password_lockout_after_repeated_failures(shop):
+def test_worker_role_boundaries(shop):
+
+=== FILE: ./backend/tests/conftest.py ===
+class Shop:
+def shop(tmp_path, monkeypatch):
+
+=== FILE: ./backend/tests/__init__.py ===
+
+=== FILE: ./backend/tests/test_receipts.py ===
+def direct(shop, token=None, label=None, qty="1", unit="pièce", price="500"):
+def catalog(shop, pid, token=None, qty="1"):
+def test_sequential_numbers_across_direct_and_catalog(shop):
+def test_direct_sale_needs_no_product_and_touches_no_stock(shop):
+def test_direct_sale_requires_price(shop):
+def test_mixed_invoice_and_receipt_fields(shop):
+def test_idempotent_client_ref_no_duplicate(shop):
+def test_void_keeps_numbering_gapless_forward(shop):
+def test_printable_receipt_sizes(shop):
+
+=== FILE: ./backend/tests/test_units.py ===
+def sale(shop, pid, unit, qty, token=None, price=None):
+def test_receive_5_cartons_of_12_packs_then_sell_2_packs(shop):
+def test_carton_to_boite_to_piece_chain(shop):
+def test_litre_with_fractions_is_exact(shop):
+def test_kg_custom_unit_and_unknown_unit_rejected(shop):
+def test_insufficient_stock_blocks_and_changes_nothing(shop):
+def test_invalid_factor_and_too_precise_quantity(shop):
+
+=== FILE: ./backend/frontend_dist/assets/index-Cl1BJrHy.js ===
+
+=== FILE: ./backend/alembic/env.py ===
+def run_migrations_online() -> None:
+
+=== FILE: ./backend/alembic/versions/0002_immutability_triggers.py ===
+def upgrade() -> None:
+def downgrade() -> None:
+
+=== FILE: ./backend/alembic/versions/0001_initial_schema.py ===
+def upgrade() -> None:
+def downgrade() -> None:
+
+=== FILE: ./backend/run_server.py ===
+
+=== FILE: ./scripts/build-backend.js ===
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const root = path.join(__dirname, "..");
+const backend = path.join(root, "backend");
+const dist = path.join(root, "frontend", "dist");
+const bin = process.platform === "win32" ? path.join(backend, ".venv", "Scripts") : path.join(backend, ".venv", "bin");
+const venvPy = path.join(bin, process.platform === "win32" ? "python.exe" : "python");
+const py = process.env.PYTHON || (fs.existsSync(venvPy) ? venvPy : process.platform === "win32" ? "python" : "python3");
+const r = spawnSync(py, ["-m", "PyInstaller", "--noconfirm", "--clean", "shop-server.spec"], {
+
+=== FILE: ./electron/preload.js ===
+const { contextBridge, ipcRenderer } = require("electron");
+
+=== FILE: ./electron/main.js ===
+const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
+const { spawn, execFile } = require("child_process");
+const http = require("http");
+const net = require("net");
+const path = require("path");
+const fs = require("fs");
+function freePort() {
+function backendCommand(p) {
+function startBackend(p) {
+function waitForHealth(p, tries = 120) {
+function killBackend() {
+function paperHeightPx() {
