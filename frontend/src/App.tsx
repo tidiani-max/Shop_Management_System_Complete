@@ -371,6 +371,51 @@ const products = [
   },
 ];
 
+
+async function downloadDailyExcel(opts?: {
+  period?: "day" | "week";
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<string> {
+  const params = new URLSearchParams();
+  if (opts?.period) params.set("period", opts.period);
+  if (opts?.dateFrom) params.set("date_from", opts.dateFrom);
+  if (opts?.dateTo) params.set("date_to", opts.dateTo);
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+  const apiBase =
+    (window as any).shopDesktop?.apiBase ||
+    envBase ||
+    (location.protocol.startsWith("http") && location.port !== "5173" && location.port !== "8443"
+      ? `${location.origin}/api/v1`
+      : "http://127.0.0.1:8765/api/v1");
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${apiBase}/reports/daily-excel${q}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.message || data?.detail || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const match = cd.match(/filename="?([^"]+)"?/i);
+  const fallback =
+    opts?.dateFrom && opts?.dateTo && opts.dateFrom !== opts.dateTo
+      ? `Rapport_${opts.dateFrom}_au_${opts.dateTo}.xlsx`
+      : `Rapport_${opts?.dateFrom || new Date().toISOString().slice(0, 10)}.xlsx`;
+  const filename = match ? match[1] : fallback;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return filename;
+}
+
 function App() {
   const [lang, setLang] = useState<Lang>("fr");
   const [screen, setScreen] = useState<Screen>("welcome");
@@ -2570,6 +2615,7 @@ function OwnerSettingsPage({ t, lang, setPage, setModal }: any) {
         <section className="card">
           <CardTitle title={fr ? "Sauvegarde (clé USB)" : "النسخ الاحتياطي (USB)"} />
           <SettingsRow icon={<Download />} title={fr ? "Sauvegarder maintenant" : "حفظ نسخة الآن"} sub={fr ? "Enregistre la base sur une clé USB ou un dossier" : "يحفظ القاعدة على USB أو مجلد"} onClick={() => open("backup")} />
+          <SettingsRow icon={<Download />} title={fr ? "Rapport Excel du jour (WhatsApp)" : "تقرير إكسل اليومي (واتساب)"} sub={fr ? "Fichier .xlsx bilingue (FR / AR) prêt à envoyer" : "ملف إكسل ثنائي اللغة جاهز للإرسال"} onClick={() => open("excel_report")} />
           <SettingsRow icon={<RefreshCw />} title={fr ? "Restaurer une sauvegarde" : "استعادة نسخة"} sub={fr ? "Mot de passe administrateur requis" : "يتطلب كلمة مرور المدير"} onClick={() => open("restore")} />
         </section>
         <section className="card">
@@ -2612,6 +2658,8 @@ function WorkerSettingsPage({ t, lang, worker, setModal }: any) {
           <SettingsRow icon={<UserRound />} title={worker?.name} sub={worker?.username} />
           <SettingsRow icon={<LockKeyhole />} title={fr ? "Changer mon mot de passe" : "تغيير كلمة المرور"} sub="" onClick={() => open("chpw")} />
           <SettingsRow icon={<KeyRound />} title={fr ? "Code PIN rapide" : "رمز PIN سريع"} sub={fr ? "Pour changer d’utilisateur rapidement" : "لتبديل المستخدم بسرعة"} onClick={() => open("pin")} />
+        
+          <SettingsRow icon={<Download />} title={fr ? "Rapport Excel du jour (WhatsApp)" : "تقرير إكسل اليومي (واتساب)"} sub={fr ? "Fichier .xlsx bilingue (FR / AR) prêt à envoyer" : "ملف إكسل ثنائي اللغة جاهز للإرسال"} onClick={() => open("excel_report")} />
         </section>
         <section className="card">
           <CardTitle title={fr ? "Mon appareil" : "جهازي"} />
@@ -3144,6 +3192,13 @@ function FormModal({ type, t, lang, close, notify, setModal }: any) {
       } else if (type === "void") {
         await api.post(`/invoices/${ctx.invoice.id}/void`, { reason: v.reason, admin_password: v.admin_password });
         msg = fr ? "Facture annulée stock et caisse corrigés" : "تم إلغاء الفاتورة وتصحيح المخزون والصندوق";
+      } else if (type === "excel_report") {
+        const mode = v.mode || "day";
+        const f =
+          mode === "range"
+            ? await downloadDailyExcel({ dateFrom: v.date_from || undefined, dateTo: v.date_to || undefined })
+            : await downloadDailyExcel({ period: mode === "week" ? "week" : "day" });
+        msg = `${fr ? "Rapport Excel téléchargé" : "تم تحميل ملف الإكسل"} : ${f}`;
       } else if (type === "backup") {
         let dir: string | null = null;
         if (window.shopDesktop?.chooseFolder) {
@@ -3390,6 +3445,49 @@ function FormModal({ type, t, lang, close, notify, setModal }: any) {
               <p className="muted">{fr ? "Le stock et la caisse seront corrigés automatiquement. Action enregistrée dans le journal d’audit." : "سيتم تصحيح المخزون والصندوق تلقائياً وتسجيل العملية في سجل التدقيق."}</p>
             </>
           )}
+          {type === "excel_report" && (
+            <>
+              <div className="category-pills">
+                <button
+                  type="button"
+                  className={(v.mode || "day") === "day" ? "active" : ""}
+                  onClick={() => setV((s: any) => ({ ...s, mode: "day" }))}
+                >
+                  {fr ? "Aujourd’hui (Jour)" : "اليوم (يومي)"}
+                </button>
+                <button
+                  type="button"
+                  className={v.mode === "week" ? "active" : ""}
+                  onClick={() => setV((s: any) => ({ ...s, mode: "week" }))}
+                >
+                  {fr ? "7 derniers jours (Semaine)" : "آخر 7 أيام (أسبوعي)"}
+                </button>
+                <button
+                  type="button"
+                  className={v.mode === "range" ? "active" : ""}
+                  onClick={() => setV((s: any) => ({ ...s, mode: "range", date_from: s.date_from || new Date().toISOString().slice(0, 10), date_to: s.date_to || new Date().toISOString().slice(0, 10) }))}
+                >
+                  {fr ? "Choisir dates (Du → Au)" : "تحديد فترة (من ← إلى)"}
+                </button>
+              </div>
+              {v.mode === "range" && (
+                <div className="form-grid">
+                  <label className="field">
+                    <span>{fr ? "Du (Date début)" : "من تاريخ"}</span>
+                    <div className="input-wrap">
+                      <input type="date" value={v.date_from || new Date().toISOString().slice(0, 10)} onChange={set("date_from")} />
+                    </div>
+                  </label>
+                  <label className="field">
+                    <span>{fr ? "Au (Date fin)" : "إلى تاريخ"}</span>
+                    <div className="input-wrap">
+                      <input type="date" value={v.date_to || new Date().toISOString().slice(0, 10)} onChange={set("date_to")} />
+                    </div>
+                  </label>
+                </div>
+              )}
+            </>
+          )}
           {type === "backup" && (
             <p className="muted">{fr ? "Branchez votre clé USB puis choisissez le dossier de destination." : "وصّل مفتاح USB ثم اختر المجلد."}</p>
           )}
@@ -3419,7 +3517,7 @@ function FormModal({ type, t, lang, close, notify, setModal }: any) {
           <div className="modal-actions">
             <button type="button" className="btn secondary" onClick={close}>{t.back}</button>
             <button className="btn primary" disabled={busy}>
-              {type === "backup" ? (fr ? "Choisir le dossier" : "اختيار المجلد") : t.save}
+              {type === "excel_report" ? (fr ? "Télécharger Excel (.xlsx)" : "تحميل ملف إكسل (.xlsx)") : type === "backup" ? (fr ? "Choisir le dossier" : "اختيار المجلد") : t.save}
               <Check size={17} />
             </button>
           </div>

@@ -282,3 +282,263 @@ def insights(
     return {"period": {"key": period or "day", "from": d_from.isoformat(), "to": d_to.isoformat()},
             "top_by_qty": top_qty, "top_by_profit": top_profit,
             "hours": hour_list, "peak_hours": peak, "diagnostics": alerts}
+
+
+# --------------------------------------------------------------------------- bilingual daily Excel (.xlsx)
+import io
+import zipfile
+from xml.sax.saxutils import escape
+from fastapi.responses import Response
+from ..models import Customer
+
+
+def _col_ref(col_idx: int) -> str:
+    s = ""
+    while col_idx > 0:
+        col_idx, rem = divmod(col_idx - 1, 26)
+        s = chr(65 + rem) + s
+    return s
+
+
+def _build_xlsx(sheets: list[tuple[str, list[list[str | int | float]]]]) -> bytes:
+    """Generate a valid XLSX workbook using sharedStrings so Excel & Google Sheets display all cells cleanly."""
+    shared_strings: list[str] = []
+    shared_index: dict[str, int] = {}
+
+    def str_idx(text: str) -> int:
+        if text not in shared_index:
+            shared_index[text] = len(shared_strings)
+            shared_strings.append(text)
+        return shared_index[text]
+
+    wb_sheets = []
+    sheet_files: dict[str, bytes] = {}
+    for idx, (raw_title, rows) in enumerate(sheets, start=1):
+        clean_title = "".join(c for c in raw_title if c not in "[]:*?/\\").strip()
+        title = (clean_title or f"Sheet{idx}")[:31]
+        wb_sheets.append(f'<sheet name="{escape(title)}" sheetId="{idx}" r:id="rId{idx}"/>')
+
+        max_cols = max((len(r) for r in rows), default=1)
+        last_col = _col_ref(max(1, max_cols))
+        last_row = max(1, len(rows))
+        dim_ref = f"A1:{last_col}{last_row}"
+
+        xml_rows = []
+        for r_idx, row in enumerate(rows, start=1):
+            cells = []
+            for c_idx, val in enumerate(row, start=1):
+                if val is None or val == "":
+                    continue
+                ref = f"{_col_ref(c_idx)}{r_idx}"
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    cells.append(f'<c r="{ref}"><v>{val}</v></c>')
+                else:
+                    si = str_idx(str(val))
+                    cells.append(f'<c r="{ref}" t="s"><v>{si}</v></c>')
+            xml_rows.append(f'<row r="{r_idx}">{"".join(cells)}</row>')
+
+        sheet_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            f'<dimension ref="{dim_ref}"/>'
+            '<sheetViews><sheetView workbookViewId="0"/></sheetViews>'
+            f'<sheetData>{"".join(xml_rows)}</sheetData>'
+            '</worksheet>'
+        )
+        sheet_files[f"xl/worksheets/sheet{idx}.xml"] = sheet_xml.encode("utf-8")
+
+    ss_items = [f'<si><t xml:space="preserve">{escape(s)}</t></si>' for s in shared_strings]
+    shared_strings_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{len(shared_strings)}" uniqueCount="{len(shared_strings)}">'
+        f'{"".join(ss_items)}'
+        '</sst>'
+    )
+
+    content_types = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+        '<Default Extension="xml" ContentType="application/xml"/>',
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
+        '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>',
+    ]
+    rels = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+        '</Relationships>',
+    ]
+    wb_rels = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    ]
+    for idx in range(1, len(sheets) + 1):
+        content_types.append(
+            f'<Override PartName="/xl/worksheets/sheet{idx}.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        )
+        wb_rels.append(
+            f'<Relationship Id="rId{idx}" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+            f'Target="worksheets/sheet{idx}.xml"/>'
+        )
+    wb_rels.append(
+        '<Relationship Id="rIdStyles" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
+        'Target="styles.xml"/>'
+    )
+    wb_rels.append(
+        '<Relationship Id="rIdSharedStrings" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+        'Target="sharedStrings.xml"/>'
+    )
+    wb_rels.append("</Relationships>")
+    content_types.append("</Types>")
+
+    workbook_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'<sheets>{"".join(wb_sheets)}</sheets>'
+        '</workbook>'
+    )
+    styles_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+        '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+        '</styleSheet>'
+    )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", "".join(content_types).encode("utf-8"))
+        zf.writestr("_rels/.rels", "".join(rels).encode("utf-8"))
+        zf.writestr("xl/workbook.xml", workbook_xml.encode("utf-8"))
+        zf.writestr("xl/_rels/workbook.xml.rels", "".join(wb_rels).encode("utf-8"))
+        zf.writestr("xl/styles.xml", styles_xml.encode("utf-8"))
+        zf.writestr("xl/sharedStrings.xml", shared_strings_xml.encode("utf-8"))
+        for arcname, payload in sheet_files.items():
+            zf.writestr(arcname, payload)
+    return buf.getvalue()
+
+
+@router.get("/reports/daily-excel")
+def daily_excel(
+    period: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(security.require_roles(security.OWNER, security.WORKER, security.DDS)),
+):
+    """Export a bilingual French + Arabic Excel workbook (.xlsx) for daily, weekly, or custom date ranges."""
+    d_from, d_to = resolve_period(period, date_from, date_to)
+    a, b = range_bounds(d_from, d_to)
+    per = _period(db, d_from, d_to)
+    bal = balances(db)
+
+    invs = list(
+        db.execute(
+            select(Invoice)
+            .where(Invoice.created_at >= a, Invoice.created_at < b)
+            .order_by(Invoice.id.asc())
+        ).scalars()
+    )
+    debts = list(db.execute(select(Debt).where(Debt.status == "OPEN")).scalars())
+    low_prods = list(
+        db.execute(
+            select(Product).where(Product.active == True, Product.stock_qty <= Product.low_stock_threshold)  # noqa: E712
+        ).scalars()
+    )
+    regs = list(
+        db.execute(
+            select(RegisterSession)
+            .where(RegisterSession.opened_at >= a, RegisterSession.opened_at < b)
+            .order_by(RegisterSession.id.asc())
+        ).scalars()
+    )
+
+    range_label = d_from.isoformat() if d_from == d_to else f"{d_from.isoformat()} -> {d_to.isoformat()}"
+    summary_rows: list[list[str | int | float]] = [
+        ["Indicateur / المؤشر", "Valeur / القيمة"],
+        ["Période (Du -> Au) / الفترة (من -> إلى)", range_label],
+        ["Généré par / أعدّه", f"{user.name} ({user.role})"],
+        ["Factures validées / الفواتير المكتملة", int(per["invoices"])],
+        ["Factures annulées / الفواتير الملغاة", int(per["voided"])],
+        ["Chiffre d'affaires (Ventes) / إجمالي المبيعات", float(Decimal(per["revenue"]))],
+        ["Entrées caisse - Ventes / مقبوضات المبيعات", float(Decimal(per["cash_in_from_sales"]))],
+        ["Entrées caisse - Remboursements dettes / تحصيلات الديون", float(Decimal(per["cash_in_from_debt_repayments"]))],
+        ["Dépenses / المصروفات", float(Decimal(per["expenses"]))],
+        ["Solde Espèces actuel / رصيد النقد الحالي", float(bal["CASH"])],
+        ["Solde Mobile Money actuel / رصيد الموبايل موني الحالي", float(bal["MOBILE"])],
+        ["Créances clients ouvertes / ديون العملاء المستحقة", float(sum((x.balance for x in debts if x.direction == "RECEIVABLE"), ZERO))],
+        ["Dettes fournisseurs ouvertes / ديون الموردين المستحقة", float(sum((x.balance for x in debts if x.direction == "PAYABLE"), ZERO))],
+        ["", ""],
+        ["CAISSE / الصندوق", ""],
+        ["Ouverture Espèces / رصيد فتح النقد", float(regs[-1].opening_cash) if regs else 0.0],
+        ["Fermeture Espèces comptée / النقد المعدود عند الإغلاق", float(regs[-1].counted_cash) if regs and regs[-1].counted_cash is not None else ""],
+        ["Écart Espèces / فرق النقد", float(regs[-1].diff_cash) if regs and regs[-1].diff_cash is not None else ""],
+        ["Écart Mobile Money / فرق الموبايل موني", float(regs[-1].diff_mobile) if regs and regs[-1].diff_mobile is not None else ""],
+        ["", ""],
+        ["STOCK BAS / RUPTURE / نواقص المخزون", ""],
+    ]
+    for p_item in low_prods:
+        summary_rows.append([
+            f"{p_item.name_fr} ({p_item.base_unit})",
+            float(p_item.stock_qty),
+        ])
+
+    sales_rows: list[list[str | int | float]] = [
+        [
+            "Date / التاريخ",
+            "N° Reçu / رقم الإيصال",
+            "Statut / الحالة",
+            "Paiement / الدفع",
+            "Articles / الأصناف",
+            "Montant / المبلغ",
+        ]
+    ]
+    for inv in invs:
+        items_desc = ", ".join(f"{ln.label} x{ln.base_qty}" for ln in inv.lines)
+        sales_rows.append([
+            inv.created_at.astimezone(local_tz()).strftime("%Y-%m-%d %H:%M"),
+            inv.receipt_no,
+            inv.status,
+            inv.payment_method,
+            items_desc,
+            float(inv.total),
+        ])
+
+    sales_rows.append(["", "", "", "", "", ""])
+    sales_rows.append(["CRÉDITS CLIENTS OUVERTS / ديون العملاء", "Téléphone / الهاتف", "Solde restant / المتبقي", "", "", ""])
+    for d_item in debts:
+        if d_item.direction == "RECEIVABLE":
+            cust = db.get(Customer, d_item.customer_id) if d_item.customer_id else None
+            sales_rows.append([
+                cust.name if cust else f"Client #{d_item.customer_id}",
+                cust.phone if cust and cust.phone else "",
+                float(d_item.balance),
+                "",
+                "",
+                "",
+            ])
+
+    xlsx_bytes = _build_xlsx([
+        ("Resume & Caisse", summary_rows),
+        ("Ventes & Credits", sales_rows),
+    ])
+    filename = (
+        f"Rapport_{d_from.isoformat()}.xlsx"
+        if d_from == d_to
+        else f"Rapport_{d_from.isoformat()}_au_{d_to.isoformat()}.xlsx"
+    )
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

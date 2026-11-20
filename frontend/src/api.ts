@@ -100,3 +100,40 @@ export type SessionUser = {
 
 export const errMsg = (e: unknown, fallback = "Erreur") =>
   e instanceof ApiError ? e.message : fallback;
+
+export async function downloadDailyExcel(opts?: {
+  period?: "day" | "week";
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<string> {
+  const params = new URLSearchParams();
+  if (opts?.period) params.set("period", opts.period);
+  if (opts?.dateFrom) params.set("date_from", opts.dateFrom);
+  if (opts?.dateTo) params.set("date_to", opts.dateTo);
+  const q = params.toString() ? `?${params.toString()}` : "";
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/reports/daily-excel${q}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data?.code || "EXPORT_ERROR", data?.message || "Erreur d'export Excel.");
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const match = cd.match(/filename="?([^"]+)"?/i);
+  const fallback =
+    opts?.dateFrom && opts?.dateTo && opts.dateFrom !== opts.dateTo
+      ? `Rapport_${opts.dateFrom}_au_${opts.dateTo}.xlsx`
+      : `Rapport_${opts?.dateFrom || new Date().toISOString().slice(0, 10)}.xlsx`;
+  const filename = match ? match[1] : fallback;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return filename;
+}
