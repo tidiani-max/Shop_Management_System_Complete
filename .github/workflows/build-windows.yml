@@ -17,9 +17,11 @@ jobs:
           python-version: '3.12'
       - name: Install Python dependencies
         run: |
-          python -m venv backend/.venv
-          backend/.venv/Scripts/pip install -r backend/requirements.txt pyinstaller
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pyinstaller
       - name: Install Node dependencies & Build Windows EXE
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           npm run setup
           npm run dist:win
